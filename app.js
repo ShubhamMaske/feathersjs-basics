@@ -1,6 +1,10 @@
 const feathers = require('@feathersjs/feathers');
+const socketio = require('@feathersjs/socketio');
+const bodyParser = require('koa-bodyparser');
+const serveStatic = require('koa-static');
+const koa = require('@feathersjs/koa');
 
-let app = feathers();
+let app = koa.koa(feathers());
 
 class MessageService {
     constructor() {
@@ -28,31 +32,30 @@ class MessageService {
   }
 
 
-  // Register the message service on the Feathers application
+// Use the current folder for static file hosting
+app.use(serveStatic('.'))
+// Register the error handle
+app.use(koa.errorHandler())
+// Parse JSON request bodies
+app.use(bodyParser())
+
+// Register REST service handler
+app.configure(koa.rest())
+// Configure Socket.io real-time APIs
+app.configure(socketio())
+// Register our messages service
 app.use('messages', new MessageService())
 
-// Log every time a new message has been created
-app.service('messages').on('created', (message) => {
-  console.log('A new message has been created', message)
+// Add any new real-time connection to the `everybody` channel
+app.on('connection', (connection) => app.channel('everybody').join(connection))
+// Publish all events to the `everybody` channel
+app.publish((_data) => app.channel('everybody'))
+
+// Start the server
+app.listen(3030).then(() => console.log('Feathers server listening on localhost:3030'))
+
+// For good measure let's create a message
+// So our API doesn't look so empty
+app.service('messages').create({
+  text: 'Hello world from the server'
 })
-
-// A function that creates messages and then logs
-// all existing messages on the service
-const main = async () => {
-  // Create a new message on our message service
-  await app.service('messages').create({
-    text: 'Hello Feathers'
-  })
-
-  // And another one
-  await app.service('messages').create({
-    text: 'Hello again'
-  })
-
-  // Find all existing messages
-  const messages = await app.service('messages').find()
-
-  console.log('All messages', messages)
-}
-
-main()
